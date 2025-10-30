@@ -31,22 +31,25 @@ enum class Associativity {
     None
 };
 
+// PluginFunction is type of C-function, forced to use it for reliability.
+using PluginFunction = double (*)(const double* args, int argCount);
+
 // OperationInfo struct contains information about a single operation provided by a plugin.
 struct OperationInfo {
     // canonicalName is name of the operation, with whose will be worked RPN.
-    std::string canonicalName;
+    const char* canonicalName{};
 
     // function if the function that implements the operation.
-    std::function<double(const std::vector<double>&)> function;
+    PluginFunction function{};
 
     // numArguments is the number of arguments the operation takes.
-    int numArguments;
+    int numArguments{};
 
     // type is the type of the operation (Function, Infix, Prefix, Postfix).
-    OperationType type;
+    OperationType type{};
 
     // symbol is the symbol used to represent the operation in expressions.
-    std::string symbol;
+    const char* symbol{};
 
     // precedence is the precedence level of the operation.
     int precedence = 0; // 0 for functions.
