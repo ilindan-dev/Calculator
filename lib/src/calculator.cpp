@@ -8,6 +8,7 @@
 #include <vector>
 #include <functional>
 #include <cmath>
+#include <stack>
 
 #include "tokenizer.hpp"
 
@@ -16,6 +17,37 @@
 #else
 #include <dlfcn.h>
 #endif
+
+// isNumber checks if the given string is a valid number.
+static bool isNumber(const std::string& s) {
+    if (s.empty()) return false;
+    char* p;
+    std::strtod(s.c_str(), &p);
+    return *p == 0;
+}
+
+// -- Internal function for basic operations ---
+// Attention! Functions must comply with the C-API, so they cannot throw exceptions.
+
+static double internalAdd(const double* args, int argCount) {
+    return args[0] + args[1];
+}
+static double internalSub(const double* args, int argCount) {
+    return args[0] - args[1];
+}
+static double internalMul(const double* args, int argCount) {
+    return args[0] * args[1];
+}
+static double internalDiv(const double* args, int argCount) {
+    if (args[1] == 0) return NAN;
+    return args[0] / args[1];
+}
+static double internalPow(const double* args, int argCount) {
+    return std::pow(args[0], args[1]);
+}
+static double internalNegate(const double* args, int argCount) {
+    return -args[0];
+}
 
 // Impl is the implementation class for the Calculator for implementation hiding (Pimpl idiom).
 class Calculator::Impl final : public ICalculatorRegistrar {
@@ -40,16 +72,16 @@ public:
     // --- Search map for parser ---
 
     // function_operations is the map of function operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> function_operations;
+    std::map<std::string, std::string> functionOperations;
 
     // infix_operations is the map of infix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> infix_operations;
+    std::map<std::string, std::string> infixOperations;
 
     // prefix_operations is the map of prefix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> prefix_operations;
+    std::map<std::string, std::string> prefixOperations;
 
     // postfix_operations is the map of postfix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> postfix_operations;
+    std::map<std::string, std::string> postfixOperations;
 
     // --- Dynamic Tokenizer ---
     Tokenizer tokenizer;
@@ -63,38 +95,29 @@ public:
 
     // Constructor
     Impl() {
-        Impl::registerOperation({
-            "add",
-            [](const auto& args) { return args[0] + args[1]; }, 2,
+        registerOperation({
+            "add", internalAdd, 2,
             OperationType::Infix, "+", 2, Associativity::Left
         });
-        Impl::registerOperation({
-            "sub",
-            [](const auto& args) { return args[0] - args[1]; }, 2,
+        registerOperation({
+            "sub", internalSub, 2,
             OperationType::Infix, "-", 2, Associativity::Left
         });
-        Impl::registerOperation({
-            "mul",
-            [](const auto& args) { return args[0] * args[1]; }, 2,
+        registerOperation({
+            "mul", internalMul, 2,
             OperationType::Infix, "*", 3, Associativity::Left
         });
-        Impl::registerOperation({
-            "div",
-            [](const auto& args) {
-                if (args[1] == 0) throw std::invalid_argument("Divide by zero");
-                return args[0] / args[1];
-            }, 2,
+        registerOperation({
+            "div", internalDiv, 2,
             OperationType::Infix, "/", 3, Associativity::Left
         });
-        Impl::registerOperation({
-            "pow",
-            [](const auto& args) { return std::pow(args[0], args[1]); }, 2,
+        registerOperation({
+            "pow", internalPow, 2,
             OperationType::Infix, "^", 4, Associativity::Right
         });
-        Impl::registerOperation({
-            "negate",
-            [](const auto& args) { return -args[0]; }, 1,
-            OperationType::Prefix, "-", 5
+        registerOperation({
+            "negate", internalNegate, 1,
+            OperationType::Prefix, "-", 5, Associativity::Right
         });
     }
 
@@ -111,34 +134,51 @@ public:
 
     // registerOperation registers a new operation in the calculator.
     void registerOperation(const OperationInfo& info) override {
-        if (functions.contains(info.canonicalName)) {
-            std::cerr << "Warning: Operation " << info.canonicalName << " already registered. Skipping." << std::endl;
+        const std::string canonicalName = info.canonicalName;
+        const std::string symbol = info.symbol;
+
+        if (functions.contains(canonicalName)) {
+            std::cerr << "Warning: Operation " << canonicalName << " registered. Skipping." << std::endl;
             return;
         }
 
-        functions[info.canonicalName] = info.function;
-        numArgs[info.canonicalName] = info.numArguments;
+
+        PluginFunction cFunc = info.function;
+        // Wrapper, whose handle NAN and safely turns them into C++ exceptions.
+        const std::function<double(const std::vector<double>&)> cpp_wrapper =
+            [cFunc, canonicalName](const std::vector<double>& args) {
+                const double result = cFunc(args.data(), args.size());
+                if (std::isnan(result)) {
+                    throw std::runtime_error("Error in operation: " + canonicalName);
+                }
+                return result;
+        };
+        functions[canonicalName] = cpp_wrapper;
+        numArgs[canonicalName] = info.numArguments;
+
 
         switch (info.type) {
             case OperationType::Function:
-                function_operations[info.symbol] = info.canonicalName;
-                tokenizer.addSymbol(info.symbol);
+                functionOperations[symbol] = canonicalName;
+                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Infix:
-                infix_operations[info.symbol] = info.canonicalName;
-                precedences[info.canonicalName] = info.precedence;
-                associativities[info.canonicalName] = info.associativity;
-                tokenizer.addSymbol(info.symbol);
+                infixOperations[symbol] = canonicalName;
+                precedences[canonicalName] = info.precedence;
+                associativities[canonicalName] = info.associativity;
+                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Prefix:
-                prefix_operations[info.symbol] = info.canonicalName;
-                precedences[info.canonicalName] = info.precedence;
-                tokenizer.addSymbol(info.symbol);
+                prefixOperations[symbol] = canonicalName;
+                precedences[canonicalName] = info.precedence;
+                associativities[canonicalName] = info.associativity;
+                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Postfix:
-                postfix_operations[info.symbol] = info.canonicalName;
-                precedences[info.canonicalName] = info.precedence;
-                tokenizer.addSymbol(info.symbol);
+                postfixOperations[symbol] = canonicalName;
+                precedences[canonicalName] = info.precedence;
+                associativities[canonicalName] = info.associativity;
+                tokenizer.addSymbol(symbol);
                 break;
         }
     }
@@ -205,7 +245,144 @@ void Calculator::loadPlugins(const std::string& pluginDir) const {
 }
 
 // evaluate evaluates the given mathematical expression and returns the result.
-double Calculator::evaluate(const std::string& expression) {
-    // TODO: Implement the expression evaluation logic using the registered operations.
-    throw std::runtime_error("Not implemented: evaluate");
+double Calculator::evaluate(const std::string& expression) const {
+    const std::vector<Token> tokens = pImpl->tokenizer.tokenize(expression);
+
+    std::vector<std::string> outputQueue;
+    std::stack<std::string> operatorStack;
+    bool wasLastTokenOperand = false;
+
+    for (const auto& [type, value] : tokens) {
+        switch (type) {
+            case Token::Type::Number:
+                outputQueue.push_back(value);
+                wasLastTokenOperand = true;
+                break;
+            case Token::Type::Symbol: {
+                std::string operationName;
+                OperationType operationType = {};
+                if (wasLastTokenOperand) {
+                    if (pImpl->infixOperations.contains(value)) {
+                        operationName = pImpl->infixOperations.at(value);
+                        operationType = OperationType::Infix;
+                    } else if (pImpl->postfixOperations.contains(value)) {
+                        operationName = pImpl->postfixOperations.at(value);
+                        operationType = OperationType::Postfix;
+                    }
+                } else {
+                    if (pImpl->prefixOperations.contains(value)) {
+                        operationName = pImpl->prefixOperations.at(value);
+                        operationType = OperationType::Prefix;
+                    } else if (pImpl->functionOperations.contains(value)) {
+                        operationName = pImpl->functionOperations.at(value);
+                        operationType = OperationType::Function;
+                    }
+                }
+
+                if (operationName.empty()) {
+                    throw std::runtime_error("Unknown symbol or context error: " + value);
+                }
+
+                if (operationType == OperationType::Function) {
+                    operatorStack.push(operationName);
+                } else {
+                    const int precedence = pImpl->precedences.at(operationName);
+                    const Associativity assoc = pImpl->associativities.contains(operationName) ?
+                    pImpl->associativities.at(operationName) : Associativity::None;
+
+                    while (!operatorStack.empty()) {
+                        const std::string& topOperator = operatorStack.top();
+                        if (!pImpl->precedences.contains(topOperator)) break;
+
+                        if (const int topPrecedence = pImpl->precedences.at(topOperator);
+                            (assoc == Associativity::Left && precedence <= topPrecedence) ||
+                            (assoc == Associativity::Right && precedence < topPrecedence)) {
+                            outputQueue.push_back(topOperator);
+                            operatorStack.pop();
+                            } else {
+                                break;
+                            }
+                    }
+                    operatorStack.push(operationName);
+                }
+
+                wasLastTokenOperand = (operationType == OperationType::Postfix);
+                break;
+            }
+            case Token::Type::ParenthesisOpen:
+                operatorStack.emplace("(");
+                wasLastTokenOperand = false;
+                break;
+            case Token::Type::ParenthesisClose:
+                while (!operatorStack.empty() && operatorStack.top() != "(") {
+                    outputQueue.push_back(operatorStack.top());
+                    operatorStack.pop();
+                }
+                if (operatorStack.empty()) {
+                    throw std::runtime_error("Mismatched parentheses (missing '(').");
+                }
+                operatorStack.pop();
+
+                if (!operatorStack.empty()) {
+                    if (const std::string& topOp = operatorStack.top(); pImpl->functions.contains(topOp) &&
+                        !pImpl->precedences.contains(topOp)) {
+                        outputQueue.push_back(topOp);
+                        operatorStack.pop();
+                    }
+                }
+                wasLastTokenOperand = true;
+                break;
+            case Token::Type::Comma:
+                while (!operatorStack.empty() && operatorStack.top() != "(") {
+                    outputQueue.push_back(operatorStack.top());
+                    operatorStack.pop();
+                }
+                if (operatorStack.empty()) {
+                    throw std::runtime_error("Mismatched comma or parentheses.");
+                }
+                wasLastTokenOperand = false;
+                break;
+            case Token::Type::Unknown:
+                throw std::runtime_error("Unknown symbol in expression: " + value);
+        }
+    }
+
+    while (!operatorStack.empty()) {
+        const std::string& topOperator = operatorStack.top();
+        if (topOperator == "(") {
+            throw std::runtime_error("Mismatched parentheses (missing ')').");
+        }
+        outputQueue.push_back(topOperator);
+        operatorStack.pop();
+    }
+
+    std::stack<double> valueStack;
+
+    for (const auto& tokenString : outputQueue) {
+        if (isNumber(tokenString)) {
+            valueStack.push(std::stod(tokenString));
+        } else if (pImpl->functions.contains(tokenString)) {
+            const std::string& operatorName = tokenString;
+            const int argsCount = pImpl->numArgs.at(operatorName);
+            if (valueStack.size() < static_cast<size_t>(argsCount)) {
+                throw std::runtime_error("Insufficient values for operation: " + operatorName);
+            }
+
+            std::vector<double> args(argsCount);
+            for (int i = 0; i < argsCount; ++i) {
+                args[argsCount - 1 - i] = valueStack.top();
+                valueStack.pop();
+            }
+            double result = pImpl->functions.at(operatorName)(args);
+            valueStack.push(result);
+        } else {
+            throw std::runtime_error("Unknown operation in RPN: " + tokenString);
+        }
+    }
+
+    if (valueStack.size() != 1) {
+        throw std::runtime_error("Invalid expression: final value stack size is not 1.");
+    }
+
+    return valueStack.top();
 }
