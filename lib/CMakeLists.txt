@@ -12,9 +12,19 @@ target_sources(calculator INTERFACE
         FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/include/calculator/calculator.hpp
         ${CMAKE_CURRENT_SOURCE_DIR}/include/calculator/plugin.hpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/calculator/i_calculator_registrar.hpp
 )
 
 add_library(calculator_impl STATIC)
-target_sources(calculator_impl PRIVATE src/calculator.cpp src/plugin.cpp)
 
-target_link_libraries(calculator_impl PRIVATE calculator)
+target_compile_definitions(
+        calculator_impl PRIVATE
+        PLUGIN_EXTENSION="${CMAKE_SHARED_LIBRARY_SUFFIX}"
+)
+
+target_sources(calculator_impl PRIVATE
+        src/calculator.cpp
+        src/tokenizer.cpp
+)
+
+target_link_libraries(calculator_impl PUBLIC calculator)
