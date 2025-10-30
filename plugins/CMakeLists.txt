@@ -1,13 +1,7 @@
-# Trigonometric functions.
-add_subdirectory(./cos)
-add_subdirectory(./sin)
-add_subdirectory(./tg)
-add_subdirectory(./ctg)
+file(GLOB plugin_subdirs CONFIGURE_DEPENDS *)
 
-# Angle conversion functions.
-add_subdirectory(./deg)
-add_subdirectory(./rad)
-
-# Other math functions.
-add_subdirectory(./log)
-add_subdirectory(./pow)
+foreach(subdir ${plugin_subdirs})
+    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${subdir} AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/CMakeLists.txt)
+        add_subdirectory(${subdir})
+    endif()
+endforeach()
