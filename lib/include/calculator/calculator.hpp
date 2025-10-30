@@ -17,7 +17,7 @@ class Calculator final : public ICalculatorRegistrar {
     // loadPlugins loads plugins from the specified directory.
     void loadPlugins(const std::string& pluginDir) const;
     // evaluate evaluates the given mathematical expression and returns the result.
-    double evaluate(const std::string& expression);
+    [[nodiscard]] double evaluate(const std::string& expression) const;
 
     // registerOperation registers a new operation in the calculator.
     void registerOperation(const OperationInfo& operation) override;
