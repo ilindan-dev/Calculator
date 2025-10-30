@@ -14,7 +14,8 @@ endif()
 
 enable_testing()
 
-add_subdirectory(./app)
 add_subdirectory(./lib)
-add_subdirectory(./tests)
 add_subdirectory(./plugins)
+add_subdirectory(./app)
+add_subdirectory(./tests)
+
