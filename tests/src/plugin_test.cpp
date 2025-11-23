@@ -23,7 +23,7 @@ protected:
 
         const std::string extension = PLUGIN_EXTENSION;
         bool foundPlugins = false;
-        for (const auto& entry : std::filesystem::directory_iterator(pluginPath)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(pluginPath)) {
             if (entry.is_regular_file() && entry.path().extension() == extension) {
                 foundPlugins = true;
                 std::cout << "Found plugin: " << entry.path().filename().string() << std::endl;
