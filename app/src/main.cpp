@@ -23,13 +23,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (vm.contains("help")) {
+    if (vm.count("help")) {
         std::cout << "Usage: calculator_app -e \"expression\" [options]\n\n";
         std::cout << desc << "\n";
         return 0;
     }
 
-    if (!vm.contains("expr")) {
+    if (!vm.count("expr")) {
         std::cerr << "Error: The expression is required." << std::endl;
         std::cout << desc << "\n";
         return 1;

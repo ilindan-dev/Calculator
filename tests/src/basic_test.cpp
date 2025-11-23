@@ -32,8 +32,8 @@ TEST(CalculatorTest, Associativity) {
 
 TEST(CalculatorTest, Exceptions) {
     const Calculator calculator;
-    EXPECT_THROW(calculator.evaluate("5 / 0"), std::runtime_error);
-    EXPECT_THROW(calculator.evaluate("( 2 + 3"), std::runtime_error);
-    EXPECT_THROW(calculator.evaluate("2 + 3 )"), std::runtime_error);
-    EXPECT_THROW(calculator.evaluate("2 +"), std::runtime_error);
+    EXPECT_THROW((void)calculator.evaluate("5 / 0"), std::runtime_error);
+    EXPECT_THROW((void)calculator.evaluate("( 2 + 3"), std::runtime_error);
+    EXPECT_THROW((void)calculator.evaluate("2 + 3 )"), std::runtime_error);
+    EXPECT_THROW((void)calculator.evaluate("2 +"), std::runtime_error);
 }
