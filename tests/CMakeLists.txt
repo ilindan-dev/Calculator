@@ -6,6 +6,7 @@ add_executable(CalculatorTests
         src/plugin_test.cpp
 )
 
+find_package(Threads REQUIRED)
 find_package(GTest REQUIRED)
 
 target_link_libraries(
