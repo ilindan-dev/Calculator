@@ -43,28 +43,41 @@ C-функции
 
 ### 1. Зависимости
 - Компилятор C++23
-- CMake 4.0+
+- CMake 3.31+
 - vcpkg (для управления зависимостями)
 
 ### 2. Сборка
+Проект использует `vcpkg` для управления зависимостями. Убедитесь, что переменная среды `VCPKG_ROOT` установлена, или укажите путь вручную.
+
+#### Linux / macOS
 ```bash
 # 1. Склонируйте репозиторий
 git clone https://github.com/ilindan-dev/Calculator
 cd Calculator
 
-# 2. Настройте CMake, указав путь к vcpkg.cmake
-# (Замените /path/to/vcpkg на ваш путь)
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+# 2. Конфигурация (Ninja рекомендуется)
+cmake -B build -G "Ninja" -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
 
 # 3. Соберите проект
-cmake --build cmake-build-debug
+cmake --build build
 ```
 
-Во время сборки CMake автоматически скомпилирует все плагины и скопирует их в `cmake-build-debug/app/plugins/`.
+#### Windows (PowerShell)
+```bash
+# 1. Склонируйте репозиторий
+git clone https://github.com/ilindan-dev/Calculator
+cd Calculator
 
+# 2. Конфигурация (Visual Studio 2022)
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+# 3. Сборка (Debug)
+cmake --build build --config Debug
+```
 ### 3. Запуск
 ```bash
-cd cmake-build-debug/app
+cd build/app
+# Или для Windows: cd build/app/Debug
 
 # Запуск с выражением
 ./calculator_app -e '<ваше выражение>'
