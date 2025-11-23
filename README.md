@@ -1,6 +1,6 @@
 # C++ Калькулятор с Плагинами (C++23)
 
-<img src="https://img.shields.io/badge/C%2B%2B-23-00599C.svg?style=flat-square&logo=cplusplus&logoColor=white" alt="C++23"> <img src="https://img.shields.io/badge/CMake-4.0%2B-0672A4.svg?style=flat-square&logo=cmake&logoColor=white" alt="CMake 4.0+"> <img src="https://img.shields.io/badge/Powered%20by-vcpkg-2C92D4.svg?style=flat-square&logo=vcpkg&logoColor=white" alt="vcpkg">
+<img src="https://img.shields.io/badge/C%2B%2B-23-00599C.svg?style=flat-square&logo=cplusplus&logoColor=white" alt="C++23"> <img src="https://img.shields.io/badge/CMake-3.31%2B-0672A4.svg?style=flat-square&logo=cmake&logoColor=white" alt="CMake 3.31+"> <img src="https://img.shields.io/badge/Powered%20by-vcpkg-2C92D4.svg?style=flat-square&logo=vcpkg&logoColor=white" alt="vcpkg">
 
 Это консольное приложение-калькулятор, написанное на C++23, которое использует динамически загружаемые плагины (.so/.dll) 
 для расширения своей функциональности. Приложение способно вычислять математические выражения, используя инфиксные, 
