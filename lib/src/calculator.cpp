@@ -237,7 +237,7 @@ void Calculator::loadPlugins(const std::string& pluginDir) const {
         return;
     }
     const std::string extension = PLUGIN_EXTENSION;
-    for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(pluginDir)) {
         if (entry.is_regular_file() && entry.path().extension() == extension) {
             pImpl->loadPlugin(entry.path());
         }
