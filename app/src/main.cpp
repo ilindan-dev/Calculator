@@ -1,63 +1,68 @@
 #include <iostream>
 #include <string>
 #include <filesystem>
-#include <boost/program_options.hpp>
+#include <cxxopts.hpp>
 #include "calculator/calculator.hpp"
 
-namespace po = boost::program_options;
+std::filesystem::path getAppDir(const char* argv0) {
+    std::filesystem::path path(argv0);
+    if (path.has_parent_path()) {
+        return std::filesystem::absolute(path).parent_path();
+    }
+    return std::filesystem::current_path();
+}
 
 int main(int argc, char* argv[]) {
-    po::options_description desc("Calculator Options");
-    desc.add_options()
-        ("help,h", "Show this help message and exit.")
-        ("expr,e", po::value<std::string>(), "The expression to evaluate.")
-        ("plugin-dir,p", po::value<std::string>()->default_value("./plugins"), "The directory to load plugins from.");
-
-    po::variables_map vm;
     try {
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);
-    } catch (const std::exception& e) {
-        std::cerr << "Argument parsing error: " << e.what() << std::endl;
-        std::cout << desc << "\n";
-        return 1;
-    }
+        // Настройка опций
+        cxxopts::Options options("calculator_app", "C++17 Calculator with Plugins");
 
-    if (vm.count("help")) {
-        std::cout << "Usage: calculator_app -e \"expression\" [options]\n\n";
-        std::cout << desc << "\n";
-        return 0;
-    }
+        options.add_options()
+            ("h,help", "Show help")
+            ("e,expr", "Expression to evaluate", cxxopts::value<std::string>())
+            ("p,plugin-dir", "Plugin directory", cxxopts::value<std::string>()->default_value("plugins"));
 
-    if (!vm.count("expr")) {
-        std::cerr << "Error: The expression is required." << std::endl;
-        std::cout << desc << "\n";
-        return 1;
-    }
+        auto result = options.parse(argc, argv);
 
-    auto expression = vm["expr"].as<std::string>();
-    auto pluginDir = vm["plugin-dir"].as<std::string>();
+        // Обработка --help
+        if (result.count("help")) {
+            std::cout << options.help() << std::endl;
+            return 0;
+        }
 
-    Calculator calc;
+        // Проверка обязательного аргумента
+        if (!result.count("expr")) {
+            std::cerr << "Error: The expression is required (-e \"...\")" << std::endl;
+            std::cout << options.help() << std::endl;
+            return 1;
+        }
 
-    std::string appPath = argv[0];
-    std::string appDir = std::filesystem::path(appPath).parent_path().string();
-    std::string fullPluginDir = appDir + "/" + pluginDir;
+        std::string expression = result["expr"].as<std::string>();
+        std::string pluginDirName = result["plugin-dir"].as<std::string>();
 
-    std::cout << "Loading plugins from: " << fullPluginDir << std::endl;
-    calc.loadPlugins(fullPluginDir);
-    std::cout << "Loading complete." << std::endl;
-    std::cout << "---" << std::endl;
+        // Логика путей
+        std::filesystem::path appDir = getAppDir(argv[0]);
+        std::filesystem::path fullPluginDir = appDir / pluginDirName;
 
-    try {
-        double result = calc.evaluate(expression);
+        Calculator calc;
+
+        std::cout << "Loading plugins from: " << fullPluginDir << std::endl;
+        // Передаем строку, так как наш интерфейс ожидает string
+        calc.loadPlugins(fullPluginDir.string());
+        std::cout << "Loading complete." << std::endl;
+        std::cout << "---" << std::endl;
+
+        double calcResult = calc.evaluate(expression);
         std::cout << "Expression: " << expression << std::endl;
-        std::cout << "Result: " << result << std::endl;
+        std::cout << "Result: " << calcResult << std::endl;
+
+    } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << "Argument parsing error: " << e.what() << std::endl;
+        return 1;
     } catch (const std::exception& e) {
-        std::cerr << "Evaluation error: " << e.what() << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 
     return 0;
 }
-

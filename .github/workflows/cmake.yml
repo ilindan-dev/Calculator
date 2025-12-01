@@ -1,13 +1,10 @@
-name: Build & Test (C++23)
+name: Build & Test (C++17 Standalone)
 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-
-env:
-  VCPKG_BINARY_SOURCES: "clear;default,readwrite"
 
 jobs:
   build:
@@ -22,36 +19,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache vcpkg archives
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/vcpkg/archives
-            C:/Users/runneradmin/AppData/Local/vcpkg/archives
-          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            ${{ runner.os }}-vcpkg-
-
-      - name: Install Ninja (Linux)
+      - name: Install Ninja (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build
 
-      - name: Configure CMake (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cmake -B build -G "Ninja" \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-
-      - name: Configure CMake (Windows)
-        if: runner.os == 'Windows'
+      - name: Configure CMake
         shell: bash
         run: |
-          cmake -B build -G "Visual Studio 17 2022" -A x64 \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          else
+            cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          fi
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }}
