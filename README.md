@@ -1,84 +1,55 @@
-# C++ Калькулятор с Плагинами (C++23)
+# C++ Calculator with Plugins (C++17)
 
-<img src="https://img.shields.io/badge/C%2B%2B-23-00599C.svg?style=flat-square&logo=cplusplus&logoColor=white" alt="C++23"> <img src="https://img.shields.io/badge/CMake-3.31%2B-0672A4.svg?style=flat-square&logo=cmake&logoColor=white" alt="CMake 3.31+"> <img src="https://img.shields.io/badge/Powered%20by-vcpkg-2C92D4.svg?style=flat-square&logo=vcpkg&logoColor=white" alt="vcpkg">
-
-Это консольное приложение-калькулятор, написанное на C++23, которое использует динамически загружаемые плагины (.so/.dll) 
-для расширения своей функциональности. Приложение способно вычислять математические выражения, используя инфиксные, 
-префиксные и постфиксные операторы.
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C.svg?style=flat-square&logo=cplusplus&logoColor=white)
+![CMake](https://img.shields.io/badge/CMake-3.14%2B-0672A4.svg?style=flat-square&logo=cmake&logoColor=white)
 
 ## Основные возможности
-- Базовые операции: Встроенная поддержка +, -, *, /, ^ (возведение в степень) и унарного -.
-- Динамические плагины: Загружает плагины во время выполнения из папки ./plugins.
-- Продвинутая математика: Включает плагины для sin (в градусах), cos, tg, ctg, ln, rad, deg.
-- Унарные операторы: Поддерживает префиксные (!n - субфакториал) и постфиксные (n! - факториал) операторы.
-- Обработка ошибок: Корректно обрабатывает деление на ноль, неверное количество аргументов (ln(-1)) и синтаксические 
-ошибки (непарные скобки).
+- Базовые и продвинутые операции:
+  - Модульность: Все математические операции загружаются динамически из папки `./plugins`.
+  - Арифметика: `+`, `-`, `*`, `/`, `^` (степень);
+  - Тригонометрия: `sin`, `cos`, `tg`, `ctg`;
+  - Другие: `ln`, `!n`, `n!`, `rad`, `deg`.
+- Поддержка платформ: Кроссплатформенная сборка и запуск на **Linux** и **Windows** (MinGW).
 
-## Ключевые архитектурные решения
-### 1. ABI-стабильный "Чистый C" API для плагинов
-Проблема: Передача C++ объектов (`std::string`, `std::function`) через "границу" C-API плагинов (`.so`/`.dll`) приводит к 
-нестабильности ABI. Разные компиляторы (или даже разные настройки одного компилятора) имеют разное бинарное представление 
-для этих классов. Это было выявлено во время отладки, когда вызов std::function, скопированной из плагина, приводил к 
-повреждению стека и падению (`SIGSEGV`) при выходе из функции или очистке памяти (вызове деструктора).
+## Сборка и Запуск
+### Требования
+- Компилятор с поддержкой C++17 (GCC, Clang, MSVC/MinGW)
+- CMake 3.14+
 
-**Решение**: API плагинов (`plugin.hpp` и `i_calculator_registrar.hpp`) был переписан как "чистый C" интерфейс.
-- Структура `OperationInfo` использует только стабильные C-типы: `const char*` (вместо `std::string`) и указатели на 
-C-функции 
-`PluginFunction` (вместо `std::function`).
-- Класс `Calculator::Impl` (в `calculator.cpp`) выступает в роли адаптера. Он получает эти C-типы и безопасно "оборачивает" 
-их в C++ объекты (`std::string`, `std::function`) уже на стороне приложения.
-- Ошибки из плагинов также передаются через C-API (возвратом `NAN`), и C++ обертка безопасно превращает их в C++ исключения.
-
-### 2. "Правило Нуля" (Rule of Zero) и PImpl
-
-Основной класс `Calculator` следует "Правилу Нуля".
-- Он использует идиому PImpl (Pointer to Implementation) через `std::unique_ptr<Impl>`.
-- Это полностью скрывает реализацию (`Impl`) от заголовочного файла `calculator.hpp`.
-- Благодаря `std::unique_ptr`, компилятор автоматически генерирует все специальные методы (перемещения), а `Calculator` 
-не нуждается в ручном управлении памятью (деструкторе, конструкторах копирования и т.д.), следуя принципу RAII. 
-(Деструктор `~Calculator()` объявлен в `.hpp` и реализован в `.cpp` только для того, чтобы `unique_ptr` мог работать с 
-неполным типом `Impl`).
-
-## Cборка и Запуск
-
-### 1. Зависимости
-- Компилятор C++23
-- CMake 3.31+
-- vcpkg (для управления зависимостями)
-
-### 2. Сборка
-Проект использует `vcpkg` для управления зависимостями. Убедитесь, что переменная среды `VCPKG_ROOT` установлена, или укажите путь вручную.
+### Инструкция по сборке
 
 #### Linux / macOS
-```bash
-# 1. Склонируйте репозиторий
+
+``` Bash
+# 1. Клонирование
 git clone https://github.com/ilindan-dev/Calculator
 cd Calculator
 
-# 2. Конфигурация (Ninja рекомендуется)
-cmake -B build -G "Ninja" -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-
-# 3. Соберите проект
+# 2. Конфигурация и сборка
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-#### Windows (PowerShell)
-```bash
-# 1. Склонируйте репозиторий
+#### Windows (MinGW / Visual Studio)
+```PowerShell
+# 1. Клонирование
 git clone https://github.com/ilindan-dev/Calculator
 cd Calculator
 
-# 2. Конфигурация (Visual Studio 2022)
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+# 2. Конфигурация
+cmake -B build
 
-# 3. Сборка (Debug)
-cmake --build build --config Debug
+# 3. Сборка
+cmake --build build --config Release
 ```
-### 3. Запуск
-```bash
-cd build/app
-# Или для Windows: cd build/app/Debug
 
-# Запуск с выражением
-./calculator_app -e '<ваше выражение>'
+### Запуск и Тестирование
+После сборки исполняемый файл и плагины будут находиться в директории `build/app` (или `build/app/Release` на Windows).
+```Bash
+# Запуск калькулятора
+./build/app/calculator_app -e "2 + 2 * 2"
+
+# Запуск тестов (GoogleTest)
+cd build
+ctest --output-on-failure
 ```
