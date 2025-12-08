@@ -2,18 +2,20 @@
 #define CALCULATOR_PLUGIN_HPP
 
 #include "i_calculator_registrar.hpp"
-#include <string>
-#include <vector>
-#include <functional>
 
+// --------------- Windows DLL Export/Import ---------------
 #if defined(_WIN32)
     #ifdef PLUGIN_EXPORTS
+        // When compiling, we export the symbols
         #define PLUGIN_API __declspec(dllexport)
     #else
+        // When using, we import characters
         #define PLUGIN_API __declspec(dllimport)
     #endif
 #else
-    #define PLUGIN_API
+// ---------------------- Linux/macOS ----------------------
+    // For Linux/macOS making characters visible by default
+    #define PLUGIN_API __attribute__((visibility("default")))
 #endif
 
 // OperationType is enum class of the type an operation.

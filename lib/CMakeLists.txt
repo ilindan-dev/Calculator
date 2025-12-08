@@ -1,3 +1,4 @@
+# -------------------------------------------------- Interface library -------------------------------------------------
 add_library(calculator INTERFACE)
 
 target_include_directories(
@@ -15,6 +16,7 @@ target_sources(calculator INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/include/calculator/i_calculator_registrar.hpp
 )
 
+# ----------------------------------------------- Implementation Library -----------------------------------------------
 add_library(calculator_impl STATIC)
 
 target_compile_definitions(
@@ -25,6 +27,14 @@ target_compile_definitions(
 target_sources(calculator_impl PRIVATE
         src/calculator.cpp
         src/tokenizer.cpp
+        src/dll_loader.cpp
+        src/dll_loader.hpp
 )
 
 target_link_libraries(calculator_impl PUBLIC calculator)
+
+# ---------------------------------------------- Linking system libraries ----------------------------------------------
+
+if(UNIX)
+    target_link_libraries(calculator_impl PRIVATE dl)
+endif()

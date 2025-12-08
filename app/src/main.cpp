@@ -4,55 +4,60 @@
 #include <cxxopts.hpp>
 #include "calculator/calculator.hpp"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+// getAppDir is a function for getting the directory where the executable file is located.
 std::filesystem::path getAppDir(const char* argv0) {
-    std::filesystem::path path(argv0);
-    if (path.has_parent_path()) {
+    if (const std::filesystem::path path(argv0); path.has_parent_path()) {
         return std::filesystem::absolute(path).parent_path();
     }
     return std::filesystem::current_path();
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     try {
-        // Настройка опций
-        cxxopts::Options options("calculator_app", "C++17 Calculator with Plugins");
+        cxxopts::Options options("calculator_app", "Calculator with Plugins");
 
         options.add_options()
             ("h,help", "Show help")
             ("e,expr", "Expression to evaluate", cxxopts::value<std::string>())
-            ("p,plugin-dir", "Plugin directory", cxxopts::value<std::string>()->default_value("plugins"));
+            ("p,plugin-dir", "Plugin directory", cxxopts::value<std::string>()->default_value("."));
 
-        auto result = options.parse(argc, argv);
+        const auto result = options.parse(argc, argv);
 
-        // Обработка --help
         if (result.count("help")) {
             std::cout << options.help() << std::endl;
             return 0;
         }
 
-        // Проверка обязательного аргумента
         if (!result.count("expr")) {
             std::cerr << "Error: The expression is required (-e \"...\")" << std::endl;
             std::cout << options.help() << std::endl;
             return 1;
         }
 
-        std::string expression = result["expr"].as<std::string>();
-        std::string pluginDirName = result["plugin-dir"].as<std::string>();
+        const std::string expression = result["expr"].as<std::string>();
+        const std::string pluginDirName = result["plugin-dir"].as<std::string>();
 
-        // Логика путей
-        std::filesystem::path appDir = getAppDir(argv[0]);
+        const std::filesystem::path appDir = getAppDir(argv[0]);
         std::filesystem::path fullPluginDir = appDir / pluginDirName;
 
-        Calculator calc;
+        fullPluginDir = std::filesystem::weakly_canonical(fullPluginDir);
+
+        const Calculator calc;
 
         std::cout << "Loading plugins from: " << fullPluginDir << std::endl;
-        // Передаем строку, так как наш интерфейс ожидает string
-        calc.loadPlugins(fullPluginDir.string());
-        std::cout << "Loading complete." << std::endl;
-        std::cout << "---" << std::endl;
 
-        double calcResult = calc.evaluate(expression);
+        calc.loadPlugins(fullPluginDir.string());
+
+        const double calcResult = calc.evaluate(expression);
+
         std::cout << "Expression: " << expression << std::endl;
         std::cout << "Result: " << calcResult << std::endl;
 

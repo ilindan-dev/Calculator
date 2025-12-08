@@ -1,5 +1,7 @@
 #include "calculator/calculator.hpp"
 #include "calculator/plugin.hpp"
+#include "tokenizer.hpp"
+#include "dll_loader.hpp"
 
 #include <stdexcept>
 #include <filesystem>
@@ -10,43 +12,14 @@
 #include <cmath>
 #include <stack>
 
-#include "tokenizer.hpp"
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
-// isNumber checks if the given string is a valid number.
-static bool isNumber(const std::string& s) {
-    if (s.empty()) return false;
-    char* p;
-    std::strtod(s.c_str(), &p);
-    return *p == 0;
-}
-
-// -- Internal function for basic operations ---
-// Attention! Functions must comply with the C-API, so they cannot throw exceptions.
-
-static double internalAdd(const double* args, int argCount) {
-    return args[0] + args[1];
-}
-static double internalSub(const double* args, int argCount) {
-    return args[0] - args[1];
-}
-static double internalMul(const double* args, int argCount) {
-    return args[0] * args[1];
-}
-static double internalDiv(const double* args, int argCount) {
-    if (args[1] == 0) return NAN;
-    return args[0] / args[1];
-}
-static double internalPow(const double* args, int argCount) {
-    return std::pow(args[0], args[1]);
-}
-static double internalNegate(const double* args, int argCount) {
-    return -args[0];
+namespace {
+    // Helper function to check if a string is a valid number
+    bool isNumber(const std::string& s) {
+        if (s.empty()) return false;
+        char* p;
+        std::strtod(s.c_str(), &p);
+        return *p == 0;
+    }
 }
 
 // Impl is the implementation class for the Calculator for implementation hiding (Pimpl idiom).
@@ -55,175 +28,126 @@ public:
 
     // functions is the map of registered functions, the key is CanonicalName.
     // <CanonicalName, Function>
-    std::map<std::string, std::function<double(const std::vector<double>&)>> functions;
+    std::unordered_map<std::string, std::function<double(const std::vector<double>&)>> functions;
 
     // numArgs is the map of number of arguments for each operation, the key is CanonicalName.
     // <CanonicalName, ArgCount>
-    std::map<std::string, int> numArgs;
+    std::unordered_map<std::string, int> numArgs;
 
     // precedences is the map of precedences for each operation, the key is CanonicalName.
     // <CanonicalName, Precedence>
-    std::map<std::string, int> precedences;
+    std::unordered_map<std::string, int> precedences;
 
     // associativities is the map of associativities for each operation, the key is CanonicalName.
     // <CanonicalName, Associativity>
-    std::map<std::string, Associativity> associativities;
-
-    // --- Search map for parser ---
+    std::unordered_map<std::string, Associativity> associativities;
 
     // function_operations is the map of function operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> functionOperations;
+    std::unordered_map<std::string, std::string> functionOperations;
 
     // infix_operations is the map of infix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> infixOperations;
+    std::unordered_map<std::string, std::string> infixOperations;
 
     // prefix_operations is the map of prefix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> prefixOperations;
+    std::unordered_map<std::string, std::string> prefixOperations;
 
     // postfix_operations is the map of postfix operations, the key is Symbol, the value is CanonicalName.
-    std::map<std::string, std::string> postfixOperations;
+    std::unordered_map<std::string, std::string> postfixOperations;
 
-    // --- Dynamic Tokenizer ---
+    // Dynamic Tokenizer
     Tokenizer tokenizer;
 
-    // --- Plugin handles ---
-#ifdef _WIN32
-    std::vector<HMODULE> pluginHandles;
-#else
-    std::vector<void*> pluginHandles;
-#endif
+    // Store DllLoader objects to keep libraries loaded in memory
+    std::vector<DllLoader> loadedPlugins;
 
-    // Constructor
-    Impl() {
-        registerOperation({
-            "add", internalAdd, 2,
-            OperationType::Infix, "+", 2, Associativity::Left
-        });
-        registerOperation({
-            "sub", internalSub, 2,
-            OperationType::Infix, "-", 2, Associativity::Left
-        });
-        registerOperation({
-            "mul", internalMul, 2,
-            OperationType::Infix, "*", 3, Associativity::Left
-        });
-        registerOperation({
-            "div", internalDiv, 2,
-            OperationType::Infix, "/", 3, Associativity::Left
-        });
-        registerOperation({
-            "pow", internalPow, 2,
-            OperationType::Infix, "^", 4, Associativity::Right
-        });
-        registerOperation({
-            "negate", internalNegate, 1,
-            OperationType::Prefix, "-", 5, Associativity::Right
-        });
-    }
+    Impl() = default;
+    ~Impl() override = default;
 
-    // Destructor
-    ~Impl() override {
-        for (auto handle : pluginHandles) {
-#ifdef _WIN32
-            FreeLibrary(handle);
-#else
-            dlclose(handle);
-#endif
-        }
-    }
-
-    // registerOperation registers a new operation in the calculator.
+    // registerOperation registers a new operation from a plugin
     void registerOperation(const OperationInfo& info) override {
         const std::string canonicalName = info.canonicalName;
         const std::string symbol = info.symbol;
 
-        if (functions.contains(canonicalName)) {
+        if (functions.find(canonicalName) != functions.end()) {
             std::cerr << "Warning: Operation " << canonicalName << " registered. Skipping." << std::endl;
             return;
         }
 
-
         PluginFunction cFunc = info.function;
-        // Wrapper, whose handle NAN and safely turns them into C++ exceptions.
-        const std::function<double(const std::vector<double>&)> cpp_wrapper =
+
+        const std::function<double(const std::vector<double>&)> cppWrapper =
             [cFunc, canonicalName](const std::vector<double>& args) {
-                const double result = cFunc(args.data(), args.size());
-                if (std::isnan(result)) {
-                    throw std::runtime_error("Error in operation: " + canonicalName);
-                }
+                const double result = cFunc(args.data(), static_cast<int>(args.size()));
+                // if (std::isnan(result)) {
+                //     throw std::runtime_error("Error in operation: " + canonicalName);
+                // }
                 return result;
         };
-        functions[canonicalName] = cpp_wrapper;
-        numArgs[canonicalName] = info.numArguments;
 
+        functions[canonicalName] = cppWrapper;
+        numArgs[canonicalName] = info.numArguments;
 
         switch (info.type) {
             case OperationType::Function:
                 functionOperations[symbol] = canonicalName;
-                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Infix:
                 infixOperations[symbol] = canonicalName;
                 precedences[canonicalName] = info.precedence;
                 associativities[canonicalName] = info.associativity;
-                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Prefix:
                 prefixOperations[symbol] = canonicalName;
                 precedences[canonicalName] = info.precedence;
                 associativities[canonicalName] = info.associativity;
-                tokenizer.addSymbol(symbol);
                 break;
             case OperationType::Postfix:
                 postfixOperations[symbol] = canonicalName;
                 precedences[canonicalName] = info.precedence;
                 associativities[canonicalName] = info.associativity;
-                tokenizer.addSymbol(symbol);
                 break;
         }
+
+        tokenizer.addSymbol(symbol);
     }
 
-    // loadPlugin loads a single plugin from the specified path.
+    // loadPlugin loads a single dynamic library using DllLoader
     void loadPlugin(const std::filesystem::path& pluginPath) {
         using RegisterPluginFunc = void(*)(ICalculatorRegistrar*);
 
         try {
-#ifdef _WIN32
-            HMODULE handle = LoadLibraryA(pluginPath.string().c_str());
-            if (!handle) {
-                throw std::runtime_error("Failed to load plugin: " + pluginPath.string());
-            }
-            pluginHandles.push_back(handle);
+            DllLoader loader(pluginPath.string());
 
-            auto registerPlugin = reinterpret_cast<RegisterPluginFunc>(GetProcAddress(handle, "registerPlugin"));
-
-#else
-            void* handle = dlopen(pluginPath.string().c_str(), RTLD_NOW);
-            if (!handle) {
-                throw std::runtime_error("Failed to load plugin: " + pluginPath.string() + " Error: " + dlerror());
-            }
-            pluginHandles.push_back(handle);
-            const auto registerPlugin = reinterpret_cast<RegisterPluginFunc>(dlsym(handle, "registerPlugin"));
-#endif
+            const auto registerPlugin =
+                loader.getSymbol<RegisterPluginFunc>("registerPlugin");
             if (!registerPlugin) {
-                throw std::runtime_error("Failed to find registerPlugin function in: " + pluginPath.string());
+                throw std::runtime_error("Failed to find 'registerPlugin' symbol");
             }
+
             registerPlugin(this);
 
-            std::cout << "Registered plugin: " << pluginPath.filename().string() << std::endl;
+            loadedPlugins.push_back(std::move(loader));
+
         } catch (const std::exception& e) {
-            std::cerr << "Failed to load plugin: " << pluginPath.string() << ": " << e.what() << std::endl;
+            std::cerr << "Error loading plugin " << pluginPath << ": " << e.what() << std::endl;
         }
     }
 };
 
-// --- Calculator realize ---
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------- Calculator -----------------------------------------------------
 
-// Constructor
+// Constructor.
 Calculator::Calculator() : pImpl(std::make_unique<Impl>()) {}
 
-// Destructor
+// Destructor.
 Calculator::~Calculator() = default;
+
+// Move Constructor.
+Calculator::Calculator(Calculator&& other) noexcept = default;
+
+// Move Assignment.
+Calculator& Calculator::operator=(Calculator&& other) noexcept = default;
 
 // registerOperation registers a new operation in the calculator.
 void Calculator::registerOperation(const OperationInfo& operation) {
@@ -236,7 +160,16 @@ void Calculator::loadPlugins(const std::string& pluginDir) const {
         std::cout << "Failed to load plugins: " << pluginDir << std::endl;
         return;
     }
+#ifndef PLUGIN_EXTENSION
+#ifdef _WIN32
+    const std::string extension = ".dll";
+#else
+    const std::string extension = ".so";
+#endif
+#else
     const std::string extension = PLUGIN_EXTENSION;
+#endif
+
     for (const auto& entry : std::filesystem::recursive_directory_iterator(pluginDir)) {
         if (entry.is_regular_file() && entry.path().extension() == extension) {
             pImpl->loadPlugin(entry.path());
@@ -252,6 +185,10 @@ double Calculator::evaluate(const std::string& expression) const {
     std::stack<std::string> operatorStack;
     bool wasLastTokenOperand = false;
 
+    auto contains = [](const auto& map, const std::string& key) {
+        return map.find(key) != map.end();
+    };
+
     for (const auto& [type, value] : tokens) {
         switch (type) {
             case Token::Type::Number:
@@ -261,19 +198,20 @@ double Calculator::evaluate(const std::string& expression) const {
             case Token::Type::Symbol: {
                 std::string operationName;
                 OperationType operationType = {};
+
                 if (wasLastTokenOperand) {
-                    if (pImpl->infixOperations.contains(value)) {
+                    if (contains(pImpl->infixOperations, value)) {
                         operationName = pImpl->infixOperations.at(value);
                         operationType = OperationType::Infix;
-                    } else if (pImpl->postfixOperations.contains(value)) {
+                    } else if (contains(pImpl->postfixOperations, value)) {
                         operationName = pImpl->postfixOperations.at(value);
                         operationType = OperationType::Postfix;
                     }
                 } else {
-                    if (pImpl->prefixOperations.contains(value)) {
+                    if (contains(pImpl->prefixOperations, value)) {
                         operationName = pImpl->prefixOperations.at(value);
                         operationType = OperationType::Prefix;
-                    } else if (pImpl->functionOperations.contains(value)) {
+                    } else if (contains(pImpl->functionOperations, value)) {
                         operationName = pImpl->functionOperations.at(value);
                         operationType = OperationType::Function;
                     }
@@ -287,12 +225,12 @@ double Calculator::evaluate(const std::string& expression) const {
                     operatorStack.push(operationName);
                 } else {
                     const int precedence = pImpl->precedences.at(operationName);
-                    const Associativity assoc = pImpl->associativities.contains(operationName) ?
+                    const Associativity assoc = contains(pImpl->associativities, operationName) ?
                     pImpl->associativities.at(operationName) : Associativity::None;
 
                     while (!operatorStack.empty()) {
                         const std::string& topOperator = operatorStack.top();
-                        if (!pImpl->precedences.contains(topOperator)) break;
+                        if (!contains(pImpl->precedences, topOperator)) break;
 
                         if (const int topPrecedence = pImpl->precedences.at(topOperator);
                             (assoc == Associativity::Left && precedence <= topPrecedence) ||
@@ -324,8 +262,8 @@ double Calculator::evaluate(const std::string& expression) const {
                 operatorStack.pop();
 
                 if (!operatorStack.empty()) {
-                    if (const std::string& topOp = operatorStack.top(); pImpl->functions.contains(topOp) &&
-                        !pImpl->precedences.contains(topOp)) {
+                    if (const std::string& topOp = operatorStack.top(); contains(pImpl->functions, topOp) &&
+                        !contains(pImpl->precedences,topOp)) {
                         outputQueue.push_back(topOp);
                         operatorStack.pop();
                     }
@@ -361,7 +299,7 @@ double Calculator::evaluate(const std::string& expression) const {
     for (const auto& tokenString : outputQueue) {
         if (isNumber(tokenString)) {
             valueStack.push(std::stod(tokenString));
-        } else if (pImpl->functions.contains(tokenString)) {
+        } else if (contains(pImpl->functions, tokenString)) {
             const std::string& operatorName = tokenString;
             const int argsCount = pImpl->numArgs.at(operatorName);
             if (valueStack.size() < static_cast<size_t>(argsCount)) {

@@ -1,4 +1,4 @@
-include(GoogleTest)
+find_package(Threads REQUIRED)
 
 add_executable(CalculatorTests
         src/main_test.cpp
@@ -6,34 +6,32 @@ add_executable(CalculatorTests
         src/plugin_test.cpp
 )
 
-find_package(Threads REQUIRED)
-find_package(GTest REQUIRED)
-
-target_link_libraries(
-        CalculatorTests
-        PRIVATE
+target_link_libraries(CalculatorTests PRIVATE
         GTest::gtest
         Threads::Threads
         calculator_impl
 )
 
 target_compile_definitions(CalculatorTests PRIVATE
-        PLUGIN_DIR="${CMAKE_BINARY_DIR}/plugins"
-        PLUGIN_EXTENSION="${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        PLUGIN_DIR="${CMAKE_BINARY_DIR}/bin"
 )
 
 add_dependencies(CalculatorTests
-        sin_plugin
-        cos_plugin
-        tg_plugin
-        ctg_plugin
-        ln_plugin
-        deg_plugin
-        rad_plugin
-        factorial_plugin
-        subfactorial_plugin
+        plugin_add
+        plugin_sub
+        plugin_mul
+        plugin_div
+        plugin_pow
+        plugin_sin
+        plugin_cos
+        plugin_tg
+        plugin_ctg
+        plugin_ln
+        plugin_deg
+        plugin_rad
+        plugin_factorial
+        plugin_subfactorial
 )
 
-gtest_discover_tests(CalculatorTests
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
+include(GoogleTest)
+gtest_discover_tests(CalculatorTests WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

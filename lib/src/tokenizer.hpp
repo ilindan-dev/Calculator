@@ -8,12 +8,12 @@
 struct Token {
     // Type enum class represents the type of the token.
     enum class Type {
-        Number,
-        Symbol,
-        ParenthesisOpen,
-        ParenthesisClose,
-        Comma,
-        Unknown
+        Number, // Numeric literal (e.g., "3.14")
+        Symbol, // Operator or function name (e.g., "+", "sin")
+        ParenthesisOpen, // "("
+        ParenthesisClose, // ")"
+        Comma, // ","
+        Unknown // Unrecognized character
     };
 
     // type is the type of the token.
@@ -22,18 +22,21 @@ struct Token {
     std::string value;
 };
 
+// Tokenizer class is responsible for lexical analysis of mathematical expressions.
+// It breaks a string into a sequence of Tokens based on registered symbols.
 class Tokenizer {
 public:
-    // Constructor
+    // Constructor: Initializes the tokenizer with default symbols (parentheses, comma).
     Tokenizer();
 
-    // addSymbol adds a new symbol to the tokenizer's recognized symbols.
+    // addSymbol registers a new symbol (operator or function name) to be recognized.
+    // Symbols are sorted by length to ensure longer symbols are matched first (e.g., "sin" before "s").
     void addSymbol(const std::string& symbol);
 
-    // tokenize tokenizes the given expression into a vector of Tokens.
+    // tokenize parses the given expression string into a vector of Tokens.
     [[nodiscard]] std::vector<Token> tokenize(const std::string& expression) const;
 private:
-    // knownSymbols is the list of known symbols for tokenization.
+    // knownSymbols stores all registered symbols, sorted by length in descending order.
     std::vector<std::string> knownSymbols;
 };
 
